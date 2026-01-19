@@ -24,11 +24,24 @@ jobs:
           cache-dependency-path: backend/package-lock.json
 
       - run: npm ci
-      - run: npm run lint
-      - run: npm test
+      - run: npm run ci
+
+  frontend-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm install
+      - run: npm run ci
 
   build-push:
-    needs: backend-check
+    needs: [backend-check, frontend-check]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -60,3 +73,5 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            NEXT_PUBLIC_BACKEND_URL=http://localhost:4000

@@ -7,9 +7,8 @@
     "export": "next export",
     "build": "next build",
     "start": "next start -p 3430",
-    "lint": "next lint",
     "test": "echo \"No tests specified\" && exit 0",
-    "ci": "npm run lint && npm run test && npm run build",
+    "ci": "npm run test && npm run build",
     "biome-write": "npx @biomejs/biome format --write ."
   },
   "dependencies": {

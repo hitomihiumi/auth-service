@@ -1,30 +1,37 @@
-import { Controller, Request, Post, UseGuards, Get, Res } from '@nestjs/common';
+import { Controller, Request, UseGuards, Get, Res } from '@nestjs/common';
 import { AuthService } from './auth/auth.service';
 import express from 'express';
-import {GoogleAuthGuard} from './auth/google.guard';
-import {DiscordAuthGuard} from './auth/discord.guard';
+import { GoogleAuthGuard } from './auth/google.guard';
+import { DiscordAuthGuard } from './auth/discord.guard';
+import { UserDocument } from './user/user.schema';
+
+interface RequestWithUser extends express.Request {
+  user: UserDocument;
+}
 
 @Controller()
 export class AppController {
-  constructor(private readonly authService: AuthService) {
-  }
+  constructor(private readonly authService: AuthService) {}
 
   @UseGuards(GoogleAuthGuard)
   @Get('auth/google/login')
-  async googleLogin(@Request() req) {
+  async googleLogin() {
     // Initiates the Google OAuth2 flow
   }
 
   @UseGuards(GoogleAuthGuard)
   @Get('auth/google/redirect')
-  async googleRedirect(@Request() req, @Res() res: express.Response) {
-    const jwt = await this.authService.generateJwt(req.user);
+  googleRedirect(
+    @Request() req: RequestWithUser,
+    @Res() res: express.Response,
+  ) {
+    const jwt = this.authService.generateJwt(req.user);
     // State is passed back by Google in query
-    let redirectUrl = req.query.state || 'http://localhost:3000';
+    let redirectUrl = (req.query.state as string) || 'http://localhost:3000';
 
     // Ensure redirectUrl is absolute to avoid redirecting to backend's own relative path (localhost:4000)
     if (!redirectUrl.startsWith('http')) {
-       redirectUrl = `http://localhost:3000${redirectUrl.startsWith('/') ? '' : '/'}${redirectUrl}`;
+      redirectUrl = `http://localhost:3000${redirectUrl.startsWith('/') ? '' : '/'}${redirectUrl}`;
     }
 
     res.redirect(`${redirectUrl}?token=${jwt.access_token}`);
@@ -32,19 +39,22 @@ export class AppController {
 
   @UseGuards(DiscordAuthGuard)
   @Get('auth/discord/login')
-  async discordLogin(@Request() req) {
+  async discordLogin() {
     // Initiates the Discord OAuth2 flow
   }
 
   @UseGuards(DiscordAuthGuard)
   @Get('auth/discord/redirect')
-  async discordRedirect(@Request() req, @Res() res: express.Response) {
-    const jwt = await this.authService.generateJwt(req.user);
-    let redirectUrl = req.query.state || 'http://localhost:3000';
+  discordRedirect(
+    @Request() req: RequestWithUser,
+    @Res() res: express.Response,
+  ) {
+    const jwt = this.authService.generateJwt(req.user);
+    let redirectUrl = (req.query.state as string) || 'http://localhost:3000';
 
     // Ensure redirectUrl is absolute
     if (!redirectUrl.startsWith('http')) {
-       redirectUrl = `http://localhost:3000${redirectUrl.startsWith('/') ? '' : '/'}${redirectUrl}`;
+      redirectUrl = `http://localhost:3000${redirectUrl.startsWith('/') ? '' : '/'}${redirectUrl}`;
     }
 
     res.redirect(`${redirectUrl}?token=${jwt.access_token}`);

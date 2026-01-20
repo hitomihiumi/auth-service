@@ -1,5 +1,5 @@
 // IMPORTANT: Replace with your own domain address - it's used for SEO in meta tags and schema
-const baseURL = process.env.NEXT_PUBLIC_FRONTEND_URL || "";
+const baseURL = process.env.NEXT_PUBLIC_FRONTEND_URL || "https://auth.hitomihiumi.xyz";
 
 // Import and set font for each variant
 import { Geist } from "next/font/google";
@@ -71,9 +71,9 @@ const meta = {
     title: "Auth Service",
     description:
       "Auth Service for hitomihiumi applications.",
-    canonical: process.env.NEXT_PUBLIC_FRONTEND_URL || "",
+    canonical: process.env.NEXT_PUBLIC_FRONTEND_URL || "https://auth.hitomihiumi.xyz",
     robots: "noindex,nofollow",
-    alternates: [{ href: process.env.NEXT_PUBLIC_FRONTEND_URL || "", hrefLang: "en" }],
+    alternates: [{ href: process.env.NEXT_PUBLIC_FRONTEND_URL || "https://auth.hitomihiumi.xyz", hrefLang: "en" }],
   },
   // add more routes and reference them in page.tsx
 };

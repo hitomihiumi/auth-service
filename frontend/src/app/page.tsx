@@ -1,10 +1,12 @@
 "use client";
 
 import {
-  Heading,
-  Text,
-  Button,
-  Column,
+    Heading,
+    Text,
+    Button,
+    Column,
+    Row,
+    Line
 } from "@once-ui-system/core";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
@@ -38,7 +40,11 @@ function LoginContent() {
           {callbackUrl !== '/' && callbackUrl !== '' ? ' your application' : ' the service'}
         </Text>
 
-        <Column fillWidth gap="s" marginTop="l">
+          <Row onBackground="neutral-weak" fillWidth gap="24" vertical="center">
+              <Line />/<Line />
+          </Row>
+
+        <Column fillWidth gap="s">
             <Button
                 variant="secondary"
                 onClick={() => handleLogin('google')}

@@ -11,7 +11,7 @@ export class User {
   @Prop({ required: true })
   provider: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, unique: true })
   providerId: string;
 
   @Prop()

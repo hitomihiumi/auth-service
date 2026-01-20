@@ -6,6 +6,7 @@ interface UserPayload {
   username: string;
   avatar?: string;
   sub: string;
+  email: string;
 }
 
 function App() {
@@ -58,6 +59,7 @@ function App() {
           )}
           <h1>Welcome, {user.username}!</h1>
           <p style={{ color: '#666' }}>User ID: {user.sub}</p>
+          <p style={{ color: '#666' }}>email: {user.email}</p>
           <button
             onClick={() => setUser(null)}
             style={{ marginTop: 20, padding: '10px 20px', cursor: 'pointer' }}

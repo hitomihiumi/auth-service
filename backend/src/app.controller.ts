@@ -1,5 +1,6 @@
-import { Controller, Request, UseGuards, Get, Res } from '@nestjs/common';
+import { Controller, Request, UseGuards, Get, Res, Query, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth/auth.service';
+import { JwtService } from '@nestjs/jwt';
 import express from 'express';
 import { GoogleAuthGuard } from './auth/google.guard';
 import { DiscordAuthGuard } from './auth/discord.guard';
@@ -11,7 +12,35 @@ interface RequestWithUser extends express.Request {
 
 @Controller()
 export class AppController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  /**
+   * Verify JWT token - allows external services to validate tokens without sharing secret
+   */
+  @Get('auth/verify')
+  async verifyToken(@Query('token') token: string) {
+    if (!token) {
+      throw new UnauthorizedException('Token is required');
+    }
+
+    try {
+      const payload = this.jwtService.verify(token);
+      return {
+        valid: true,
+        payload: {
+          sub: payload.sub,
+          username: payload.username,
+          email: payload.email,
+          avatar: payload.avatar,
+        },
+      };
+    } catch (error) {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
+  }
 
   @UseGuards(GoogleAuthGuard)
   @Get('auth/google/login')

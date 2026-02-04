@@ -13,6 +13,7 @@ services:
       - DISCORD_CALLBACK_URL=${DISCORD_CALLBACK_URL:-http://localhost:4000/auth/discord/redirect}
       - JWT_SECRET=${JWT_SECRET}
       - APP_PORT=4000
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3333,http://localhost:3430}
     depends_on:
       - mongo
     networks:
@@ -23,12 +24,12 @@ services:
       context: ./frontend
       args:
         NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:4000}
-        NEXT_PUBLIC_FRONTEND_URL: ${NEXT_PUBLIC_FRONTEND_URL}
+        NEXT_PUBLIC_FRONTEND_URL: ${NEXT_PUBLIC_FRONTEND_URL:-http://localhost:3430}
     ports:
       - "3430:3430"
     environment:
       - NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL:-http://localhost:4000}
-      - NEXT_PUBLIC_FRONTEND_URL=${NEXT_PUBLIC_FRONTEND_URL}
+      - NEXT_PUBLIC_FRONTEND_URL=${NEXT_PUBLIC_FRONTEND_URL:-http://localhost:3430}
     depends_on:
       - backend
     networks:

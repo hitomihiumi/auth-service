@@ -1,4 +1,12 @@
-import { Controller, Request, UseGuards, Get, Res, Query, UnauthorizedException } from '@nestjs/common';
+import {
+  Controller,
+  Request,
+  UseGuards,
+  Get,
+  Res,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { AuthService } from './auth/auth.service';
 import { JwtService } from '@nestjs/jwt';
 import express from 'express';
@@ -8,6 +16,13 @@ import { UserDocument } from './user/user.schema';
 
 interface RequestWithUser extends express.Request {
   user: UserDocument;
+}
+
+interface UserPayload {
+  username: string;
+  avatar?: string;
+  sub: string;
+  email: string;
 }
 
 @Controller()
@@ -21,13 +36,13 @@ export class AppController {
    * Verify JWT token - allows external services to validate tokens without sharing secret
    */
   @Get('auth/verify')
-  async verifyToken(@Query('token') token: string) {
+  verifyToken(@Query('token') token: string) {
     if (!token) {
       throw new UnauthorizedException('Token is required');
     }
 
     try {
-      const payload = this.jwtService.verify(token);
+      const payload = this.jwtService.verify<UserPayload>(token);
       return {
         valid: true,
         payload: {
@@ -38,6 +53,7 @@ export class AppController {
         },
       };
     } catch (error) {
+      console.log(error);
       throw new UnauthorizedException('Invalid or expired token');
     }
   }

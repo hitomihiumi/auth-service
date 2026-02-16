@@ -5,7 +5,8 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // CORS configuration from environment
-  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || '*';
+  const allowedOrigins =
+    process.env.ALLOWED_ORIGINS?.split(',').map((o) => o.trim()) || '*';
   app.enableCors({
     origin: allowedOrigins,
     credentials: true,

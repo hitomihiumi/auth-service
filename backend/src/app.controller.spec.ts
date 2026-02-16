@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from './app.controller';
 import { AuthService } from './auth/auth.service';
+import {JwtService} from "@nestjs/jwt";
 
 describe('AppController', () => {
   let appController: AppController;
@@ -15,6 +16,12 @@ describe('AppController', () => {
             generateJwt: jest.fn(),
           },
         },
+        {
+          provide: JwtService,
+          useValue: {
+            token: jest.fn(),
+          }
+        }
       ],
     }).compile();
 

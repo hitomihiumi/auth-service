@@ -2,7 +2,7 @@
 # sibling workspace manifests live there.
 #   docker build -f backend/Dockerfile .
 
-FROM node:20-alpine AS base
+FROM node:20-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable && corepack prepare pnpm@10.15.1 --activate
@@ -29,11 +29,13 @@ RUN pnpm --filter @hitomihiumi/auth-backend run build
 FROM build AS prune
 RUN pnpm deploy --legacy --filter @hitomihiumi/auth-backend --prod /prod
 
-FROM node:20-alpine AS runtime
+FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
-RUN apk add --no-cache dumb-init
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends dumb-init \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY --from=prune --chown=node:node /prod/node_modules ./node_modules
 COPY --from=prune --chown=node:node /prod/package.json ./

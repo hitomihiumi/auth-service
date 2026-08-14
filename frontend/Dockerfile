@@ -1,7 +1,7 @@
 # Built from the repository root, not from frontend/:
 #   docker build -f frontend/Dockerfile .
 
-FROM node:20-alpine AS base
+FROM node:20-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable && corepack prepare pnpm@10.15.1 --activate
@@ -28,13 +28,15 @@ ENV NEXT_PUBLIC_FRONTEND_URL=$NEXT_PUBLIC_FRONTEND_URL
 
 RUN pnpm --filter @hitomihiumi/auth-frontend run build
 
-FROM node:20-alpine AS runtime
+FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3430
 ENV HOSTNAME=0.0.0.0
 
-RUN apk add --no-cache dumb-init
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends dumb-init \
+ && rm -rf /var/lib/apt/lists/*
 
 # The standalone bundle carries its own minimal node_modules; static assets are
 # served from disk and are not part of it.

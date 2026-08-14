@@ -2,13 +2,21 @@
 # sibling workspace manifests live there.
 #   docker build -f backend/Dockerfile .
 
-FROM node:20-alpine AS base
+FROM node:20-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable && corepack prepare pnpm@10.15.1 --activate
 WORKDIR /repo
 
 FROM base AS deps
+# argon2 ships prebuilt binaries, but node-gyp-build verifies one loads before
+# using it and silently falls back to compiling when that check fails — which
+# is what happens in this image. The toolchain makes that fallback succeed. It
+# lives in the build stages only; the runtime image copies the built artifact.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 make g++ \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
@@ -29,11 +37,13 @@ RUN pnpm --filter @hitomihiumi/auth-backend run build
 FROM build AS prune
 RUN pnpm deploy --legacy --filter @hitomihiumi/auth-backend --prod /prod
 
-FROM node:20-alpine AS runtime
+FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
-RUN apk add --no-cache dumb-init
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends dumb-init \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY --from=prune --chown=node:node /prod/node_modules ./node_modules
 COPY --from=prune --chown=node:node /prod/package.json ./
@@ -47,6 +57,11 @@ COPY --chown=node:node backend/docker-entrypoint.sh ./
 # copy would silently produce an image without one. The prisma CLI is a
 # production dependency, so this works against the deployed tree.
 RUN ./node_modules/.bin/prisma generate && chown -R node:node ./node_modules
+
+# Fail the build rather than the first admin login: argon2 is a native module,
+# and a copy that does not load would otherwise only surface at runtime.
+RUN node -e "require('argon2'); require('@prisma/client');" \
+ && echo "native modules load"
 
 RUN chmod +x docker-entrypoint.sh
 USER node

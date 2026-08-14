@@ -1,27 +1,51 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-authsvc}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      - POSTGRES_DB=${POSTGRES_DB:-auth_service}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-authsvc} -d ${POSTGRES_DB:-auth_service}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-network
+
   backend:
-    build: ./backend
+    # Context is the repository root so the pnpm lockfile and every workspace
+    # manifest are visible to the build.
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "4000:4000"
     environment:
-      - MONGODB_URI=mongodb://mongo:27017/auth-service
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-      - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL:-http://localhost:4000/auth/google/redirect}
-      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
-      - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
-      - DISCORD_CALLBACK_URL=${DISCORD_CALLBACK_URL:-http://localhost:4000/auth/discord/redirect}
-      - JWT_SECRET=${JWT_SECRET}
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-authsvc}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-auth_service}?schema=public
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      - ENCRYPTION_KEYS=${ENCRYPTION_KEYS:-}
+      - ENCRYPTION_ACTIVE_KEY_ID=${ENCRYPTION_ACTIVE_KEY_ID:-}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:4000}
       - APP_PORT=4000
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3333,http://localhost:3430}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3430,http://localhost:5173}
+      - ADMIN_BOOTSTRAP_EMAIL=${ADMIN_BOOTSTRAP_EMAIL:-}
+      - ADMIN_BOOTSTRAP_PASSWORD=${ADMIN_BOOTSTRAP_PASSWORD:-}
+      - ENABLE_SWAGGER=${ENABLE_SWAGGER:-}
     depends_on:
-      - mongo
+      postgres:
+        condition: service_healthy
     networks:
       - app-network
 
   frontend:
     build:
-      context: ./frontend
+      context: .
+      dockerfile: frontend/Dockerfile
       args:
         NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:4000}
         NEXT_PUBLIC_FRONTEND_URL: ${NEXT_PUBLIC_FRONTEND_URL:-http://localhost:3430}
@@ -35,18 +59,9 @@ services:
     networks:
       - app-network
 
-  mongo:
-    image: mongo:6.0
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-    networks:
-      - app-network
-
 networks:
   app-network:
     driver: bridge
 
 volumes:
-  mongo_data:
+  postgres_data:

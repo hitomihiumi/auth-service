@@ -1,0 +1,19 @@
+# Both images build from the repository root, so this is the single ignore file
+# that applies; per-package ones would never be read.
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/*.tsbuildinfo
+
+.git
+.github
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+
+README.md
+INTEGRATION.md
+LICENSE
+docker-compose.yml

@@ -2,9 +2,9 @@ name: CI/CD
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master", "claude/**"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
 
 env:
   REGISTRY: ghcr.io
@@ -12,36 +12,72 @@ env:
 jobs:
   backend-check:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./backend
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: authsvc
+          POSTGRES_PASSWORD: authsvc
+          POSTGRES_DB: auth_service_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U authsvc"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://authsvc:authsvc@localhost:5432/auth_service_test?schema=public
+      # Test-only key; production keys come from the deployment environment.
+      ENCRYPTION_KEY: Y2ktdGVzdC1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcyE=
+      PUBLIC_BASE_URL: http://127.0.0.1:4010
+      ALLOWED_ORIGINS: http://localhost:5173
+
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
+          node-version: "20"
+          cache: "pnpm"
 
-      - run: npm ci
-      - run: npm run ci
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @hitomihiumi/auth-backend exec prisma migrate deploy
+      - run: pnpm --filter @hitomihiumi/auth-backend run ci
+      - run: pnpm --filter @hitomihiumi/auth-backend run test:e2e
 
   frontend-check:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./frontend
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
+          cache: "pnpm"
 
-      - run: npm install
-      - run: npm run ci
+      # The backend's postinstall generates a Prisma client this job never
+      # needs, and it would fail without a database URL.
+      - run: pnpm install --frozen-lockfile --filter @hitomihiumi/auth-frontend... --ignore-scripts
+      - run: pnpm --filter @hitomihiumi/auth-frontend run ci
+
+  test-app-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - run: pnpm install --frozen-lockfile --filter test-app... --ignore-scripts
+      - run: pnpm --filter test-app run build
 
   build-push:
-    needs: [backend-check, frontend-check]
+    needs: [backend-check, frontend-check, test-app-check]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -69,9 +105,13 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: ./${{ matrix.service }}
-          push: ${{ github.event_name != 'pull_request' }}
+          # Both images build from the repository root; the workspace lockfile
+          # and sibling manifests are part of the context.
+          context: .
+          file: ./${{ matrix.service }}/Dockerfile
+          push: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            NEXT_PUBLIC_BACKEND_URL=http://localhost:4000
+            NEXT_PUBLIC_BACKEND_URL=${{ vars.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000' }}
+            NEXT_PUBLIC_FRONTEND_URL=${{ vars.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3430' }}

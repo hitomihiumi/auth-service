@@ -10,6 +10,8 @@
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "noImplicitOverride": true,
     "target": "ES2023",
     "sourceMap": true,
     "outDir": "./dist",

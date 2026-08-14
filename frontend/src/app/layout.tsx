@@ -6,7 +6,7 @@ import classNames from "classnames";
 
 import { baseURL, meta, fonts, style, dataStyle } from "@/resources/once-ui.config";
 import { Meta, Schema,  Column, Flex, Mask, MatrixFx} from "@once-ui-system/core";
-import { Providers } from '@/components/Providers';
+import { ThemeProviders } from '@/components/ThemeProviders';
 
 export async function generateMetadata() {
   return Meta.generate({
@@ -105,7 +105,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <Providers>
+      <ThemeProviders>
         <Column as="body" background="page" fillWidth margin="0" padding="0" style={{ minHeight: "100vh" }}>
           <Column style={{maxHeight: "100dvh"}} fillWidth aspectRatio="1" horizontal="center" position="absolute" top="0" left="0">
             <Mask maxWidth="m" x={50} y={0} radius={50}>
@@ -120,7 +120,7 @@ export default function RootLayout({
           </Column>
           {children}
         </Column>
-      </Providers>
+      </ThemeProviders>
     </Flex>
   );
 }

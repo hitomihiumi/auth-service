@@ -4,7 +4,7 @@ import { BorderStyle, ChartMode, ChartVariant, DataThemeProvider, IconProvider, 
 import { style, dataStyle } from "../resources/once-ui.config";
 import { iconLibrary } from "../resources/icons";
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function ThemeProviders({ children }: { children: React.ReactNode }) {
   return (
     <LayoutProvider>
       <ThemeProvider

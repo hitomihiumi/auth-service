@@ -8,9 +8,18 @@ Built with NestJS + Prisma/Postgres (backend) and Next.js (frontend).
 
 ## Project Structure
 
+A pnpm workspace with three packages:
+
 - `backend` — NestJS API: the OAuth2 client, token issuing, and the admin API.
 - `frontend` — Next.js: the public sign-in page and the admin panel at `/admin`.
 - `test-app` — a small consumer application showing the integration.
+
+Install once from the repository root; there is a single lockfile.
+
+```bash
+corepack enable      # provides the pinned pnpm version
+pnpm install
+```
 
 ## How it works
 
@@ -47,22 +56,22 @@ then change the password and remove those variables from the environment.
 ## Local development
 
 ```bash
-# Postgres
+pnpm install
 docker compose up -d postgres
 
-# Backend
-cd backend
-cp ../.env.example .env      # point DATABASE_URL at localhost
-npm install
-npx prisma migrate dev
-npm run db:seed
-npm run start:dev
+# Backend — point DATABASE_URL at localhost in backend/.env
+cp .env.example backend/.env
+pnpm db:migrate
+pnpm db:seed
+pnpm dev:backend
 
-# Frontend
-cd ../frontend
-npm install
-npm run dev
+# Frontend, in another shell
+pnpm dev:frontend
 ```
+
+Useful root scripts: `pnpm test`, `pnpm test:e2e`, `pnpm lint`, `pnpm build`.
+To work inside one package directly, use
+`pnpm --filter @hitomihiumi/auth-backend run <script>`.
 
 ## Configuration
 
@@ -89,3 +98,15 @@ the application's JWKS, or by calling `POST /auth/verify`.
 
 `.github/workflows/ci.yml` lints, tests (against a Postgres service container)
 and builds both images, pushing to GHCR on `master`.
+
+Both images build from the repository root, because the workspace lockfile and
+the sibling manifests have to be inside the build context:
+
+```bash
+docker build -f backend/Dockerfile .
+docker build -f frontend/Dockerfile .
+```
+
+The backend image applies migrations on start and, when `ADMIN_BOOTSTRAP_EMAIL`
+is set, runs the compiled bootstrap-admin script. The frontend ships as a Next
+standalone bundle.

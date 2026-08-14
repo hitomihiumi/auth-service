@@ -6,11 +6,28 @@
   "license": "MIT",
   "packageManager": "pnpm@10.15.1",
   "scripts": {
-    "dev:backend": "npm --prefix backend run start:dev",
-    "dev:frontend": "npm --prefix frontend run dev",
-    "test": "npm --prefix backend test",
-    "test:e2e": "npm --prefix backend run test:e2e",
-    "lint": "npm --prefix backend run lint",
-    "build": "npm --prefix backend run build && npm --prefix frontend run build"
+    "dev:backend": "pnpm --filter @hitomihiumi/auth-backend run start:dev",
+    "dev:frontend": "pnpm --filter @hitomihiumi/auth-frontend run dev",
+    "build": "pnpm --recursive run build",
+    "lint": "pnpm --filter @hitomihiumi/auth-backend run lint",
+    "test": "pnpm --filter @hitomihiumi/auth-backend run test",
+    "test:e2e": "pnpm --filter @hitomihiumi/auth-backend run test:e2e",
+    "db:migrate": "pnpm --filter @hitomihiumi/auth-backend run prisma:migrate",
+    "db:seed": "pnpm --filter @hitomihiumi/auth-backend run db:seed"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@biomejs/biome",
+      "@nestjs/core",
+      "@parcel/watcher",
+      "@prisma/client",
+      "@prisma/engines",
+      "@swc/core",
+      "argon2",
+      "nice-napi",
+      "prisma",
+      "sharp",
+      "unrs-resolver"
+    ]
   }
 }

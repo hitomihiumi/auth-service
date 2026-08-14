@@ -17,7 +17,11 @@ services:
       - app-network
 
   backend:
-    build: ./backend
+    # Context is the repository root so the pnpm lockfile and every workspace
+    # manifest are visible to the build.
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "4000:4000"
     environment:
@@ -40,7 +44,8 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: .
+      dockerfile: frontend/Dockerfile
       args:
         NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:4000}
         NEXT_PUBLIC_FRONTEND_URL: ${NEXT_PUBLIC_FRONTEND_URL:-http://localhost:3430}

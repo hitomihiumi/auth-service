@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "test": "echo \"No tests specified\" && exit 0",
-    "ci": "npm run test && npm run build",
+    "ci": "pnpm run test && pnpm run build",
     "biome-write": "npx @biomejs/biome format --write ."
   },
   "dependencies": {

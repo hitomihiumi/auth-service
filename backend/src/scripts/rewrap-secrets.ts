@@ -6,7 +6,7 @@ import {
   openSecret,
   sealSecret,
   sealedKeyId,
-} from '../../src/crypto/envelope';
+} from '../crypto/envelope';
 
 const BATCH_SIZE = 100;
 

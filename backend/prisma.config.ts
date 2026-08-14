@@ -12,6 +12,8 @@ export default defineConfig({
     url: process.env.DATABASE_URL,
   },
   migrations: {
-    seed: 'ts-node prisma/seed.ts',
+    // Development convenience only. The production image has no ts-node, so it
+    // runs the compiled dist/scripts/seed-admin.js from its entrypoint instead.
+    seed: 'ts-node src/scripts/seed-admin.ts',
   },
 });

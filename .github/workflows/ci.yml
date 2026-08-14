@@ -12,9 +12,6 @@ env:
 jobs:
   backend-check:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./backend
 
     services:
       postgres:
@@ -40,45 +37,44 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
-          cache-dependency-path: backend/package-lock.json
+          cache: "pnpm"
 
-      - run: npm ci
-      - run: npx prisma migrate deploy
-      - run: npm run ci
-      - run: npm run test:e2e
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @hitomihiumi/auth-backend exec prisma migrate deploy
+      - run: pnpm --filter @hitomihiumi/auth-backend run ci
+      - run: pnpm --filter @hitomihiumi/auth-backend run test:e2e
 
   frontend-check:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./frontend
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
+          cache: "pnpm"
 
-      - run: npm ci
-      - run: npm run ci
+      # The backend's postinstall generates a Prisma client this job never
+      # needs, and it would fail without a database URL.
+      - run: pnpm install --frozen-lockfile --filter @hitomihiumi/auth-frontend... --ignore-scripts
+      - run: pnpm --filter @hitomihiumi/auth-frontend run ci
 
   test-app-check:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./test-app
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: npm install
-      - run: npm run build
+          cache: "pnpm"
+
+      - run: pnpm install --frozen-lockfile --filter test-app... --ignore-scripts
+      - run: pnpm --filter test-app run build
 
   build-push:
     needs: [backend-check, frontend-check, test-app-check]
@@ -109,7 +105,10 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: ./${{ matrix.service }}
+          # Both images build from the repository root; the workspace lockfile
+          # and sibling manifests are part of the context.
+          context: .
+          file: ./${{ matrix.service }}/Dockerfile
           push: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

@@ -24,7 +24,9 @@ async function main(): Promise<void> {
     const existing = await prisma.adminUser.count();
 
     if (existing > 0) {
-      console.log(`Admin users already exist (${existing}); skipping bootstrap.`);
+      console.log(
+        `Admin users already exist (${existing}); skipping bootstrap.`,
+      );
       return;
     }
 

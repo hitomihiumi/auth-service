@@ -1,21 +1,30 @@
 import { Module } from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { UserModule } from '../user/user.module';
-import { PassportModule } from '@nestjs/passport';
-import { DiscordStrategy } from './discord.strategy';
-import { GoogleStrategy } from './google.strategy';
 import { JwtModule } from '@nestjs/jwt';
+import { ApplicationsModule } from '../applications/applications.module';
+import { OAuthModule } from '../oauth/oauth.module';
+import { UsersModule } from '../users/users.module';
+import { AuthController } from './auth.controller';
+import { AuthService } from './auth.service';
+import { AuthTransactionService } from './auth-transaction.service';
+import { RedirectUriValidator } from './redirect-uri.validator';
+import { TokenService } from './token.service';
 
 @Module({
   imports: [
-    UserModule,
-    PassportModule.register({ defaultStrategy: 'discord' }),
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'secretKey',
-      signOptions: { expiresIn: '60m' },
-    }),
+    ApplicationsModule,
+    OAuthModule,
+    UsersModule,
+    // Registered without a key: every signature uses the per-application key
+    // passed at call time, so there is no global signing secret any more.
+    JwtModule.register({}),
   ],
-  providers: [AuthService, DiscordStrategy, GoogleStrategy],
-  exports: [AuthService, JwtModule],
+  controllers: [AuthController],
+  providers: [
+    AuthService,
+    AuthTransactionService,
+    TokenService,
+    RedirectUriValidator,
+  ],
+  exports: [TokenService],
 })
 export class AuthModule {}

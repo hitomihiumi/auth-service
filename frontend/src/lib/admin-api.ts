@@ -3,6 +3,9 @@ import type {
   AppUser,
   ApplicationDetail,
   ApplicationSummary,
+  MfaChallenge,
+  MfaPolicy,
+  MfaVerified,
   Paginated,
   Provider,
   ProviderKind,
@@ -70,6 +73,7 @@ export interface CreateApplicationInput {
   description?: string;
   tokenTtlSeconds?: number;
   allowEmailLinking?: boolean;
+  mfaPolicy?: MfaPolicy;
 }
 
 export interface CreateProviderInput {
@@ -180,5 +184,25 @@ export const adminApi = {
     request<AppUser>(`/admin/users/${userId}/blocked`, {
       method: "PATCH",
       ...json({ isBlocked }),
+    }),
+
+  resetUserMfa: (userId: string) =>
+    request<AppUser>(`/admin/users/${userId}/mfa/reset`, { method: "POST" }),
+};
+
+/**
+ * The second-factor prompt talks to the same API but carries no session: the
+ * challenge handle in the URL is the whole of its authority.
+ */
+export const mfaApi = {
+  challenge: (token: string) =>
+    request<MfaChallenge>(
+      `/auth/mfa/challenge?token=${encodeURIComponent(token)}`,
+    ),
+
+  verify: (token: string, code: string) =>
+    request<MfaVerified>("/auth/mfa/verify", {
+      method: "POST",
+      ...json({ token, code }),
     }),
 };

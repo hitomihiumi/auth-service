@@ -2,13 +2,14 @@ import { Module } from '@nestjs/common';
 import { ApplicationsModule } from '../applications/applications.module';
 import { AuthModule } from '../auth/auth.module';
 import { RedirectUriValidator } from '../auth/redirect-uri.validator';
+import { MfaModule } from '../mfa/mfa.module';
 import { AdminApplicationsService } from './admin-applications.service';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminController } from './admin.controller';
 import { AdminSessionGuard } from './admin-session.guard';
 
 @Module({
-  imports: [ApplicationsModule, AuthModule],
+  imports: [ApplicationsModule, AuthModule, MfaModule],
   controllers: [AdminController],
   providers: [
     AdminAuthService,

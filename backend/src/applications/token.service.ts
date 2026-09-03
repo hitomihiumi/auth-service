@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Application, User } from '@prisma/client';
-import { Jwk, SigningKeyService } from '../applications/signing-key.service';
+import { Jwk, SigningKeyService } from './signing-key.service';
 
 /** Claim set issued to consumer applications. */
 export interface AccessTokenPayload {
@@ -15,6 +15,8 @@ export interface AccessTokenPayload {
   email_verified: boolean;
   username: string | null;
   avatar: string | null;
+  /** Whether a second factor was checked before this token was issued. */
+  mfa: boolean;
   /** Claim-set version, so a future change is detectable by consumers. */
   ver: number;
   iat: number;
@@ -48,6 +50,8 @@ export class TokenService {
     application: Application;
     user: User;
     providerSlug: string;
+    /** True when the login passed a TOTP challenge as well as the provider. */
+    mfa: boolean;
   }): Promise<IssuedToken> {
     const key = await this.signingKeys.getActiveKey(params.application.id);
 
@@ -69,6 +73,7 @@ export class TokenService {
         email_verified: params.user.emailVerified,
         username: params.user.username,
         avatar: params.user.avatarUrl,
+        mfa: params.mfa,
         ver: 2,
       },
       {

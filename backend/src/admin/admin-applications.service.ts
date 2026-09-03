@@ -9,6 +9,7 @@ import { SigningKeyService } from '../applications/signing-key.service';
 import { RedirectUriValidator } from '../auth/redirect-uri.validator';
 import { InvalidRedirectUriError } from '../common/errors';
 import { SecretCryptoService } from '../crypto/secret-crypto.service';
+import { MfaService } from '../mfa/mfa.service';
 import { findPreset } from '../oauth/presets';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -16,6 +17,7 @@ import {
   providerSelect,
   userSelect,
   withProviderExtras,
+  withUserExtras,
 } from './admin.mapper';
 import {
   CreateApplicationDto,
@@ -35,6 +37,7 @@ export class AdminApplicationsService {
     private readonly signingKeys: SigningKeyService,
     private readonly redirectUris: RedirectUriValidator,
     private readonly crypto: SecretCryptoService,
+    private readonly mfa: MfaService,
   ) {}
 
   async list(query: ListQueryDto) {
@@ -342,15 +345,42 @@ export class AdminApplicationsService {
       this.prisma.user.count({ where }),
     ]);
 
-    return { items, total, page, pageSize };
+    return { items: items.map(withUserExtras), total, page, pageSize };
   }
 
   async setUserBlocked(userId: string, isBlocked: boolean) {
-    return this.prisma.user.update({
+    return withUserExtras(
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { isBlocked },
+        select: userSelect,
+      }),
+    );
+  }
+
+  /**
+   * Clears a user's second factors. The way back in for someone who has lost
+   * both their phone and their recovery codes — and the reason removing it is
+   * an operator action rather than a self-service one.
+   */
+  async resetUserMfa(userId: string) {
+    const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      data: { isBlocked },
-      select: userSelect,
+      select: { id: true },
     });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.mfa.reset(userId);
+
+    return withUserExtras(
+      await this.prisma.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: userSelect,
+      }),
+    );
   }
 
   /** Catalog backing the provider form in the admin UI. */

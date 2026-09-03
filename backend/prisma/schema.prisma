@@ -25,6 +25,18 @@ enum ProviderKind {
   @@map("provider_kind")
 }
 
+/// How strictly an application treats a second factor.
+enum MfaPolicy {
+  /// No second factor is ever asked for, and enrolment is refused.
+  DISABLED
+  /// Users may enrol; only those who did are challenged.
+  OPTIONAL
+  /// Every user must hold a confirmed factor; a login without one enrols first.
+  REQUIRED
+
+  @@map("mfa_policy")
+}
+
 enum AdminRole {
   OWNER
   ADMIN
@@ -49,6 +61,10 @@ model Application {
   /// account-takeover vector.
   allowEmailLinking Boolean @default(false) @map("allow_email_linking")
 
+  /// Whether logins into this application ask for a TOTP code from an
+  /// authenticator app (Google Authenticator, Authy, 1Password, and the like).
+  mfaPolicy MfaPolicy @default(OPTIONAL) @map("mfa_policy")
+
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -58,6 +74,7 @@ model Application {
   signingKeys      ApplicationSigningKey[]
   users            User[]
   authTransactions AuthTransaction[]
+  mfaChallenges    MfaChallenge[]
 
   @@map("applications")
 }
@@ -91,14 +108,14 @@ model ApplicationProvider {
   sortOrder     Int          @default(0) @map("sort_order")
   isEnabled     Boolean      @default(true) @map("is_enabled")
 
-  clientId String @map("client_id")
+  clientId              String   @map("client_id")
   /// Envelope-encrypted; never selected by any read that reaches a response.
-  clientSecretEnc   String   @map("client_secret_enc")
+  clientSecretEnc       String   @map("client_secret_enc")
   /// Display-only tail so admins can tell which secret is stored.
-  clientSecretLast4 String   @map("client_secret_last4")
+  clientSecretLast4     String   @map("client_secret_last4")
   clientSecretUpdatedAt DateTime @default(now()) @map("client_secret_updated_at")
   /// Overrides the preset default scopes when non-empty.
-  scopes            String[]
+  scopes                String[]
 
   // Generic OIDC/OAUTH2 only; NULL for presets, which resolve from the catalog.
   authorizationUrl String? @map("authorization_url")
@@ -121,6 +138,7 @@ model ApplicationProvider {
   application      Application       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   identities       Identity[]
   authTransactions AuthTransaction[]
+  mfaChallenges    MfaChallenge[]
 
   @@unique([applicationId, slug])
   @@index([applicationId, isEnabled])
@@ -167,8 +185,11 @@ model User {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  identities  Identity[]
+  application     Application       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  identities      Identity[]
+  totpCredentials TotpCredential[]
+  recoveryCodes   MfaRecoveryCode[]
+  mfaChallenges   MfaChallenge[]
 
   // Postgres treats NULLs as distinct, so many email-less users per app are fine.
   @@unique([applicationId, email])
@@ -264,4 +285,100 @@ model AdminSession {
   @@index([adminUserId])
   @@index([expiresAt])
   @@map("admin_sessions")
+}
+
+/// A TOTP secret shared with one authenticator app (RFC 6238).
+///
+/// Several rows per user, because people register more than one device and
+/// removing a phone should not lock out the tablet. A row only counts as a
+/// factor once `confirmedAt` is set: enrolment is not finished until the user
+/// has proved the app is actually generating matching codes.
+model TotpCredential {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  /// User-supplied device name ("iPhone", "Authy"); shown when removing one.
+  label  String
+
+  /// Envelope-encrypted shared secret. Never selected by a read that reaches a
+  /// response — after enrolment there is no reason to show it again.
+  secretEnc String @map("secret_enc")
+
+  // Google Authenticator ignores these three parameters in the enrolment URI
+  // and always assumes SHA1/6/30, so the defaults have to match what it does.
+  algorithm String @default("SHA1")
+  digits    Int    @default(6)
+  period    Int    @default(30)
+
+  confirmedAt  DateTime? @map("confirmed_at")
+  /// Highest time step already accepted. A code at or below it is refused, so a
+  /// code observed over the user's shoulder cannot be replayed inside its window.
+  lastUsedStep BigInt?   @map("last_used_step")
+  lastUsedAt   DateTime? @map("last_used_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mfaChallenges MfaChallenge[]
+
+  @@unique([userId, label])
+  @@index([userId, confirmedAt])
+  @@map("totp_credentials")
+}
+
+/// Single-use fallback for a lost authenticator app.
+model MfaRecoveryCode {
+  id       String @id @default(uuid()) @db.Uuid
+  userId   String @map("user_id") @db.Uuid
+  /// Argon2id digest. The code itself is shown once, at generation, and never
+  /// stored — a database dump must not be a set of usable bypass codes.
+  codeHash String @map("code_hash")
+
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, usedAt])
+  @@map("mfa_recovery_codes")
+}
+
+/// A login that has passed the provider but still owes a second factor.
+///
+/// The token is issued only once this is consumed, so a stolen provider
+/// callback is worth nothing on its own. It holds the already-validated
+/// redirect target from the login transaction, for the same reason that
+/// transaction does: nothing a caller supplies reaches the redirect unchecked.
+model MfaChallenge {
+  id        String @id @default(uuid()) @db.Uuid
+  /// SHA-256 of the handle handed to the browser; the value itself is never stored.
+  tokenHash String @unique @map("token_hash")
+
+  applicationId         String @map("application_id") @db.Uuid
+  userId                String @map("user_id") @db.Uuid
+  applicationProviderId String @map("application_provider_id") @db.Uuid
+
+  redirectUri   String  @map("redirect_uri")
+  consumerState String? @map("consumer_state")
+
+  /// Set when the challenge is an enrolment: the application requires a factor
+  /// and this user has none yet, so the code confirms this pending credential.
+  totpCredentialId String? @map("totp_credential_id") @db.Uuid
+
+  /// Guessing budget. A six-digit code is only 20 bits, so the challenge — not
+  /// the request rate — has to be what runs out.
+  attempts Int @default(0)
+
+  createdAt  DateTime  @default(now()) @map("created_at")
+  expiresAt  DateTime  @map("expires_at")
+  consumedAt DateTime? @map("consumed_at")
+
+  application         Application         @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applicationProvider ApplicationProvider @relation(fields: [applicationProviderId], references: [id], onDelete: Cascade)
+  totpCredential      TotpCredential?     @relation(fields: [totpCredentialId], references: [id], onDelete: SetNull)
+
+  @@index([expiresAt])
+  @@index([userId])
+  @@map("mfa_challenges")
 }

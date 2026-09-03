@@ -12,6 +12,15 @@ const ERROR_MESSAGES: Record<string, string> = {
   provider_error: "The sign-in provider could not complete the request.",
   invalid_state: "This sign-in link has expired. Please try again.",
   missing_code: "The sign-in provider did not return an authorization code.",
+  mfa_required:
+    "This application requires a code from an authenticator app, and the " +
+    "application you came from does not collect one.",
+  invalid_mfa_challenge:
+    "The second-factor prompt expired or was already used. Please sign in " +
+    "again.",
+  mfa_attempts_exhausted:
+    "Too many incorrect codes were entered. Please sign in again.",
+  unknown_user: "This account no longer exists.",
 };
 
 async function loadProviders(slug: string): Promise<PublicProviders | null> {

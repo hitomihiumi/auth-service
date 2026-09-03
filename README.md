@@ -29,7 +29,9 @@ pnpm install
    any OpenID Connect / OAuth2 endpoint — pasting that provider's client id and
    secret. Secrets are encrypted before they are stored.
 3. They register the **redirect URIs** the application is allowed to return to.
-4. The consumer application sends users to the sign-in page, which renders the
+4. They choose whether logins need a code from an **authenticator app** — off,
+   optional, or required for everyone.
+5. The consumer application sends users to the sign-in page, which renders the
    buttons that application actually has configured.
 
 Two applications can use two different Google projects at the same time; users
@@ -47,6 +49,7 @@ docker compose up --build
 The backend applies migrations and creates the bootstrap admin on start.
 
 - Sign-in page: http://localhost:3430/?app=&lt;slug&gt;
+- Second-factor prompt: http://localhost:3430/mfa (reached mid-login)
 - Admin panel: http://localhost:3430/admin
 - API: http://localhost:4000 (docs at `/docs`)
 
@@ -88,6 +91,27 @@ Note the limit of this protection: it defends against a stolen database dump or
 backup, not against compromise of the backend process, which necessarily holds
 the key in memory. Moving the key to a KMS is the next step, and the stored
 format already records which key sealed each value to make that a drop-in change.
+
+## Two-factor authentication
+
+Users register an authenticator app — Google Authenticator, Authy, 1Password or
+any other TOTP app — and are asked for a six-digit code after their provider
+login. Enrolment issues ten single-use recovery codes; an admin can clear a
+user's factors when both are lost.
+
+Each application picks its own policy in the admin panel: `DISABLED`,
+`OPTIONAL` (the default — only enrolled users are challenged) or `REQUIRED`,
+which enrols everyone else on their next sign-in.
+
+The prompt is served by the frontend at `/mfa`, so consumer applications need
+no changes: a login that owes a code simply reaches their `redirect_uri` a
+little later, with `"mfa": true` in the token. Applications that would rather
+collect the code themselves can leave `PUBLIC_APP_URL` unset and drive
+`/auth/mfa/challenge` and `/auth/mfa/verify` — see
+[INTEGRATION.md](./INTEGRATION.md).
+
+Secrets are envelope-encrypted with the same key as everything else, and
+recovery codes are stored as argon2id digests.
 
 ## Integration
 

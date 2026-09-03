@@ -18,20 +18,24 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { ApplicationService } from '../applications/application.service';
+import { TokenService } from '../applications/token.service';
 import {
   AuthFlowError,
   InvalidAuthTransactionError,
+  InvalidMfaChallengeError,
   InvalidRedirectUriError,
+  MfaAttemptsExhaustedError,
   UnknownApplicationError,
   UnknownProviderError,
 } from '../common/errors';
+import { ChallengeQueryDto, VerifyChallengeDto } from '../mfa/dto/mfa.dto';
+import { MfaService } from '../mfa/mfa.service';
 import { AuthService } from './auth.service';
 import {
   CallbackQueryDto,
   StartLoginQueryDto,
   VerifyTokenDto,
 } from './dto/start-login.dto';
-import { TokenService } from './token.service';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -49,6 +53,7 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly applications: ApplicationService,
     private readonly tokens: TokenService,
+    private readonly mfa: MfaService,
   ) {}
 
   /**
@@ -114,6 +119,38 @@ export class AuthController {
     }
   }
 
+  /**
+   * State of a pending second factor, addressed by the handle the callback
+   * issued. Anonymous by design: holding the handle is what the login proved.
+   */
+  @Get('mfa/challenge')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Describe a pending second-factor challenge' })
+  async mfaChallenge(@Query() query: ChallengeQueryDto) {
+    try {
+      return await this.mfa.describeChallenge(query.token);
+    } catch (error) {
+      throw this.toHttpException(error);
+    }
+  }
+
+  /**
+   * Spends a code and finishes the login, answering with the URL to send the
+   * browser to. The redirect is not performed here because the caller is a
+   * form on the sign-in page, not a navigation.
+   */
+  @Post('mfa/verify')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Complete a login with a code from an OTP app' })
+  async mfaVerify(@Body() body: VerifyChallengeDto) {
+    try {
+      return await this.authService.completeMfaChallenge(body.token, body.code);
+    } catch (error) {
+      throw this.toHttpException(error);
+    }
+  }
+
   @Post('verify')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
@@ -134,6 +171,7 @@ export class AuthController {
           email: payload.email,
           email_verified: payload.email_verified,
           avatar: payload.avatar,
+          mfa: payload.mfa === true,
           exp: payload.exp,
         },
       };
@@ -172,7 +210,9 @@ export class AuthController {
 
     if (
       error instanceof InvalidRedirectUriError ||
-      error instanceof InvalidAuthTransactionError
+      error instanceof InvalidAuthTransactionError ||
+      error instanceof InvalidMfaChallengeError ||
+      error instanceof MfaAttemptsExhaustedError
     ) {
       return new BadRequestException({
         error: error.code,

@@ -1,14 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ProviderKind } from '@prisma/client';
+import { Application, ProviderKind, User } from '@prisma/client';
 import { ApplicationService } from '../applications/application.service';
-import { AuthFlowError, ProviderExchangeError } from '../common/errors';
+import { TokenService } from '../applications/token.service';
+import {
+  AuthFlowError,
+  MfaRequiredError,
+  ProviderExchangeError,
+} from '../common/errors';
 import { SecretCryptoService } from '../crypto/secret-crypto.service';
+import { MfaService } from '../mfa/mfa.service';
 import { OAuthClientService } from '../oauth/oauth-client.service';
 import { ProviderConfigResolver } from '../oauth/provider-config.resolver';
 import { IdentityService } from '../users/identity.service';
 import { AuthTransactionService } from './auth-transaction.service';
 import { RedirectUriValidator } from './redirect-uri.validator';
-import { TokenService } from './token.service';
 
 /** Kinds that return an id_token and therefore accept a nonce. */
 const NONCE_KINDS = new Set<ProviderKind>([
@@ -36,6 +41,7 @@ export class AuthService {
     private readonly tokens: TokenService,
     private readonly redirectUris: RedirectUriValidator,
     private readonly crypto: SecretCryptoService,
+    private readonly mfa: MfaService,
   ) {}
 
   /**
@@ -138,10 +144,25 @@ export class AuthService {
         provider,
         profile,
       );
+
+      if (await this.mfa.isChallengeRequired(application, user.id)) {
+        return this.beginMfa(
+          {
+            application,
+            user,
+            applicationProviderId: provider.id,
+            redirectUri: transaction.redirectUri,
+            consumerState: transaction.consumerState,
+          },
+          finish,
+        );
+      }
+
       const issued = await this.tokens.issue({
         application,
         user,
         providerSlug: provider.slug,
+        mfa: false,
       });
 
       return finish({ token: issued.accessToken });
@@ -159,5 +180,71 @@ export class AuthService {
       );
       return finish({ error: new ProviderExchangeError('').code });
     }
+  }
+
+  /**
+   * Completes a login that owed a second factor, and returns where to send the
+   * browser next.
+   *
+   * The token is minted here rather than at the callback, so a provider
+   * response captured in a browser's history is worth nothing without a code.
+   */
+  async completeMfaChallenge(
+    token: string,
+    code: string,
+  ): Promise<{ redirectUrl: string; recoveryCodes: string[] | null }> {
+    const { challenge, factor, recoveryCodes } =
+      await this.mfa.completeChallenge(token, code);
+
+    // Re-read both sides: an admin may have blocked the user or disabled the
+    // provider in the minutes the challenge was open.
+    const [application, provider, user] = await Promise.all([
+      this.applications.findById(challenge.applicationId),
+      this.applications.findProviderById(challenge.applicationProviderId),
+      this.identities.findActiveUser(challenge.userId),
+    ]);
+
+    const issued = await this.tokens.issue({
+      application,
+      user,
+      providerSlug: provider.slug,
+      mfa: true,
+    });
+
+    this.logger.log(`Second factor accepted for user ${user.id} via ${factor}`);
+
+    return {
+      redirectUrl: this.redirectUris.appendParams(challenge.redirectUri, {
+        token: issued.accessToken,
+        state: challenge.consumerState,
+      }),
+      recoveryCodes,
+    };
+  }
+
+  /**
+   * Parks a login on a challenge.
+   *
+   * With a frontend origin configured the browser goes to the hosted prompt,
+   * which finishes the login itself; without one the handle is handed to the
+   * consumer application, which collects the code and calls
+   * `POST /auth/mfa/verify` on its own.
+   */
+  private async beginMfa(
+    params: {
+      application: Application;
+      user: User;
+      applicationProviderId: string;
+      redirectUri: string;
+      consumerState: string | null;
+    },
+    finish: (result: Record<string, string | null>) => string,
+  ): Promise<string> {
+    const token = await this.mfa.startChallenge(params);
+
+    return (
+      this.mfa.hostedChallengeUrl(token) ??
+      finish({ mfa_token: token, error: new MfaRequiredError('').code })
+    );
   }
 }

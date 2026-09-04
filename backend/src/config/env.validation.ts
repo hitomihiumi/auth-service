@@ -29,6 +29,13 @@ const envSchema = z
     /** Origin of this service. Becomes the JWT `iss` and prefixes callback URLs. */
     PUBLIC_BASE_URL: z.url(),
 
+    /**
+     * Origin of the hosted sign-in frontend. Only needed for the second-factor
+     * prompt: without it a login owing a TOTP code hands the challenge back to
+     * the consumer application instead of collecting the code itself.
+     */
+    PUBLIC_APP_URL: z.url().optional(),
+
     /** Comma-separated browser origins allowed to call the API with credentials. */
     ALLOWED_ORIGINS: z.string().optional(),
 

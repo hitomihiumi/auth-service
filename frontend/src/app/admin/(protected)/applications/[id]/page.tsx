@@ -7,6 +7,7 @@ import {
   Heading,
   Input,
   Row,
+  Select,
   Spinner,
   Table,
   Tag,
@@ -20,8 +21,28 @@ import { adminApi } from "@/lib/admin-api";
 import type {
   ApplicationDetail,
   AppUser,
+  MfaPolicy,
   ProviderKindInfo,
 } from "@/lib/api-types";
+
+/** The three settings, with what each one does to a sign-in. */
+const MFA_POLICIES: Array<{ value: MfaPolicy; label: string; hint: string }> = [
+  {
+    value: "DISABLED",
+    label: "Disabled",
+    hint: "Nobody is asked for a code, even users who enrolled one.",
+  },
+  {
+    value: "OPTIONAL",
+    label: "Optional",
+    hint: "Users may enrol an authenticator app; only those who did are asked.",
+  },
+  {
+    value: "REQUIRED",
+    label: "Required",
+    hint: "Everyone is asked; users without an app enrol on their next sign-in.",
+  },
+];
 
 export default function ApplicationDetailPage({
   params,
@@ -100,7 +121,8 @@ export default function ApplicationDetailPage({
         <Text variant="body-default-s" onBackground="neutral-weak">
           {application._count.users} user(s) · token TTL{" "}
           {application.tokenTtlSeconds}s · account linking{" "}
-          {application.allowEmailLinking ? "on" : "off"}
+          {application.allowEmailLinking ? "on" : "off"} · two-factor{" "}
+          {application.mfaPolicy.toLowerCase()}
         </Text>
       </Column>
 
@@ -118,6 +140,38 @@ export default function ApplicationDetailPage({
           description="Consumers verify tokens against these keys without a shared secret."
         />
         <CopyableField label="Example login URL" value={loginUrl} />
+      </Column>
+
+      <Column
+        fillWidth
+        gap="12"
+        padding="24"
+        radius="l"
+        border="neutral-alpha-weak"
+      >
+        <Text variant="label-strong-s">Two-factor authentication</Text>
+        <Select
+          id="mfa-policy"
+          label="Authenticator app codes"
+          value={application.mfaPolicy}
+          options={MFA_POLICIES.map((entry) => ({
+            value: entry.value,
+            label: entry.label,
+          }))}
+          onSelect={(value: string) =>
+            void run(() =>
+              adminApi.updateApplication(application.id, {
+                mfaPolicy: value as MfaPolicy,
+              }),
+            )
+          }
+        />
+        <Text variant="body-default-xs" onBackground="neutral-weak">
+          {
+            MFA_POLICIES.find((entry) => entry.value === application.mfaPolicy)
+              ?.hint
+          }
+        </Text>
       </Column>
 
       <Column fillWidth gap="16">
@@ -260,6 +314,7 @@ export default function ApplicationDetailPage({
               headers: [
                 { key: "user", content: "User" },
                 { key: "providers", content: "Signed in with" },
+                { key: "mfa", content: "Two-factor" },
                 { key: "last", content: "Last login" },
                 { key: "actions", content: "" },
               ],
@@ -277,24 +332,50 @@ export default function ApplicationDetailPage({
                     .map((identity) => identity.applicationProvider.slug)
                     .join(", ")}
                 </Text>,
+                <Column key={`${user.id}-m`} gap="2">
+                  <Tag
+                    size="s"
+                    variant={user.mfa.enabled ? "success" : "neutral"}
+                  >
+                    {user.mfa.enabled ? "enrolled" : "none"}
+                  </Tag>
+                  {user.mfa.enabled && (
+                    <Text variant="body-default-xs" onBackground="neutral-weak">
+                      {user.mfa.recoveryCodesRemaining} recovery code(s) left
+                    </Text>
+                  )}
+                </Column>,
                 <Text key={`${user.id}-l`} variant="body-default-xs">
                   {user.lastLoginAt
                     ? new Date(user.lastLoginAt).toLocaleString()
                     : "—"}
                 </Text>,
-                <Button
-                  key={`${user.id}-a`}
-                  size="s"
-                  variant={user.isBlocked ? "secondary" : "tertiary"}
-                  disabled={busy}
-                  onClick={() =>
-                    void run(() =>
-                      adminApi.setUserBlocked(user.id, !user.isBlocked),
-                    )
-                  }
-                >
-                  {user.isBlocked ? "Unblock" : "Block"}
-                </Button>,
+                <Row key={`${user.id}-a`} gap="8">
+                  {user.mfa.enabled && (
+                    <Button
+                      size="s"
+                      variant="tertiary"
+                      disabled={busy}
+                      onClick={() =>
+                        void run(() => adminApi.resetUserMfa(user.id))
+                      }
+                    >
+                      Reset 2FA
+                    </Button>
+                  )}
+                  <Button
+                    size="s"
+                    variant={user.isBlocked ? "secondary" : "tertiary"}
+                    disabled={busy}
+                    onClick={() =>
+                      void run(() =>
+                        adminApi.setUserBlocked(user.id, !user.isBlocked),
+                      )
+                    }
+                  >
+                    {user.isBlocked ? "Unblock" : "Block"}
+                  </Button>
+                </Row>,
               ]),
             }}
           />

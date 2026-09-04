@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Application, ApplicationProvider } from '@prisma/client';
+import { Application, ApplicationProvider, MfaPolicy } from '@prisma/client';
 import {
   UnknownApplicationError,
   UnknownProviderError,
@@ -141,6 +141,7 @@ export class ApplicationService {
     description?: string | null;
     tokenTtlSeconds?: number;
     allowEmailLinking?: boolean;
+    mfaPolicy?: MfaPolicy;
   }): Promise<Application> {
     const signingKey = await this.signingKeys.generate();
 
@@ -152,6 +153,7 @@ export class ApplicationService {
         clientId: SecretCryptoService.randomToken(24),
         tokenTtlSeconds: input.tokenTtlSeconds ?? 3600,
         allowEmailLinking: input.allowEmailLinking ?? false,
+        mfaPolicy: input.mfaPolicy ?? MfaPolicy.OPTIONAL,
         signingKeys: { create: signingKey },
       },
     });

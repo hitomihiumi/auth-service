@@ -14,8 +14,12 @@ export const E2E_APP_PORT = 4010;
 export const E2E_STUB_PORT = 4011;
 export const E2E_BASE_URL = `http://127.0.0.1:${E2E_APP_PORT}`;
 
+/** Origin of the hosted code-entry page; makes MFA logins redirect there. */
+export const E2E_FRONTEND_URL = 'http://localhost:3430';
+
 process.env.NODE_ENV = 'test';
 process.env.PUBLIC_BASE_URL = E2E_BASE_URL;
+process.env.PUBLIC_APP_URL = E2E_FRONTEND_URL;
 process.env.ALLOWED_ORIGINS = 'http://localhost:5173';
 process.env.ENCRYPTION_KEY ??= Buffer.alloc(32, 'test-key').toString('base64');
 

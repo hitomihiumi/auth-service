@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { validateEnv } from './config/env.validation';
 import { CryptoModule } from './crypto/crypto.module';
+import { MfaModule } from './mfa/mfa.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PublicModule } from './public/public.module';
 import { UsersModule } from './users/users.module';
@@ -23,11 +24,17 @@ import { UsersModule } from './users/users.module';
       // missing variable as an error on the first request that needs it.
       validate: validateEnv,
     }),
-    ThrottlerModule.forRoot([{ name: 'default', limit: 100, ttl: 60_000 }]),
+    ThrottlerModule.forRoot({
+      throttlers: [{ name: 'default', limit: 100, ttl: 60_000 }],
+      // The e2e suite drives the login flow harder in a minute than a person
+      // could, and the limits are not what it exists to check.
+      skipIf: () => process.env.NODE_ENV === 'test',
+    }),
     PrismaModule,
     CryptoModule,
     ApplicationsModule,
     UsersModule,
+    MfaModule,
     AuthModule,
     PublicModule,
     AdminModule,

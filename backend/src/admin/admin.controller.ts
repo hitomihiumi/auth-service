@@ -277,6 +277,20 @@ export class AdminController {
     return this.service.listUsers(id, query);
   }
 
+  @Post('users/:userId/mfa/reset')
+  @UseGuards(AdminSessionGuard)
+  @ApiCookieAuth()
+  @ApiOperation({
+    summary: "Clear a user's second factors",
+    description:
+      'For a user who has lost both their authenticator app and their ' +
+      'recovery codes. They enrol again on their next sign-in if the ' +
+      'application requires a factor.',
+  })
+  resetUserMfa(@Param('userId', uuid) userId: string) {
+    return this.service.resetUserMfa(userId);
+  }
+
   @Patch('users/:userId/blocked')
   @UseGuards(AdminSessionGuard)
   @ApiCookieAuth()

@@ -1,7 +1,9 @@
 import { PartialType, OmitType } from '@nestjs/swagger';
+import { MfaPolicy } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -46,6 +48,15 @@ export class CreateApplicationDto {
   @IsOptional()
   @IsBoolean()
   allowEmailLinking?: boolean;
+
+  /**
+   * Whether logins ask for a code from an authenticator app. `OPTIONAL`
+   * challenges only the users who enrolled; `REQUIRED` enrols the rest on
+   * their next sign-in; `DISABLED` turns the prompt off for everyone.
+   */
+  @IsOptional()
+  @IsEnum(MfaPolicy)
+  mfaPolicy?: MfaPolicy;
 }
 
 /**

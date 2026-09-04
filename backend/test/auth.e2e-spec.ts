@@ -5,9 +5,11 @@ import cookieParser from 'cookie-parser';
 import { createPublicKey, createVerify } from 'node:crypto';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { totp } from '../src/mfa/totp';
 import {
   E2E_APP_PORT as APP_PORT,
   E2E_BASE_URL as BASE_URL,
+  E2E_FRONTEND_URL as FRONTEND_URL,
   E2E_STUB_PORT as STUB_PORT,
 } from './setup-env';
 import { startStubProvider, StubProvider } from './stub-provider';
@@ -48,13 +50,16 @@ describe('Auth flow (e2e)', () => {
       },
     });
 
-  async function createApplication(slug: string): Promise<{
+  async function createApplication(
+    slug: string,
+    overrides: Record<string, unknown> = {},
+  ): Promise<{
     application: ApplicationResponse;
     provider: ProviderResponse;
   }> {
     const appResponse = await adminApi('/admin/applications', {
       method: 'POST',
-      body: JSON.stringify({ name: `App ${slug}`, slug }),
+      body: JSON.stringify({ name: `App ${slug}`, slug, ...overrides }),
     });
     const application = (await appResponse.json()) as ApplicationResponse;
 
@@ -158,7 +163,9 @@ describe('Auth flow (e2e)', () => {
 
   afterAll(async () => {
     await prisma.application.deleteMany({
-      where: { slug: { in: ['e2e-alpha', 'e2e-beta'] } },
+      where: {
+        slug: { in: ['e2e-alpha', 'e2e-beta', 'e2e-mfa', 'e2e-selfserve'] },
+      },
     });
     await prisma.adminUser.deleteMany({ where: { email: ADMIN_EMAIL } });
     await app.close();
@@ -391,5 +398,256 @@ describe('Auth flow (e2e)', () => {
     const redirect = new URL(callback.headers.get('location') as string);
     expect(redirect.searchParams.get('error')).toBe('email_already_registered');
     expect(redirect.searchParams.get('token')).toBeNull();
+  });
+
+  describe('second factor', () => {
+    const MFA_PROFILE = {
+      sub: 'mfa-user-1',
+      email: 'mfa@example.com',
+      email_verified: true,
+      preferred_username: 'mfa-user',
+    };
+
+    /** The secret the enrolment step handed over, reused by later logins. */
+    let secret = '';
+    let recoveryCodes: string[] = [];
+
+    const claims = (token: string): Record<string, unknown> =>
+      JSON.parse(
+        Buffer.from(token.split('.')[1], 'base64url').toString(),
+      ) as Record<string, unknown>;
+
+    const describeChallenge = (token: string): Promise<Response> =>
+      api(`/auth/mfa/challenge?token=${encodeURIComponent(token)}`);
+
+    const submitCode = (token: string, code: string): Promise<Response> =>
+      api('/auth/mfa/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, code }),
+      });
+
+    /** A code from a step far enough back to be outside the accepted window. */
+    const staleCode = (minutesAgo = 2): string =>
+      totp(secret, undefined, new Date(Date.now() - minutesAgo * 60_000));
+
+    /**
+     * A code is spent once it has been accepted, so a suite that signs in
+     * repeatedly inside one time step has to forget the last one. Nothing in
+     * the flow does this — the replay refusal has a test of its own below.
+     */
+    const forgetLastUsedCode = async (): Promise<void> => {
+      await prisma.totpCredential.updateMany({ data: { lastUsedStep: null } });
+    };
+
+    /** Runs a login and returns the challenge handle it parked on. */
+    const loginToChallenge = async (slug: string): Promise<string> => {
+      const redirect = await login(slug);
+
+      expect(`${redirect.origin}${redirect.pathname}`).toBe(
+        `${FRONTEND_URL}/mfa`,
+      );
+
+      return redirect.searchParams.get('token') as string;
+    };
+
+    beforeEach(() => {
+      stub.setProfile(MFA_PROFILE);
+    });
+
+    it('parks a login of a required application on an enrolment challenge', async () => {
+      await createApplication('e2e-mfa', { mfaPolicy: 'REQUIRED' });
+
+      const token = await loginToChallenge('e2e-mfa');
+      const challenge = (await (await describeChallenge(token)).json()) as {
+        mode: string;
+        account: string;
+        enrollment: { secret: string; otpauthUri: string; digits: number };
+      };
+
+      expect(challenge.mode).toBe('enrol');
+      expect(challenge.account).toBe('mfa@example.com');
+      expect(challenge.enrollment.digits).toBe(6);
+      expect(challenge.enrollment.otpauthUri).toContain('otpauth://totp/');
+      expect(challenge.enrollment.otpauthUri).toContain(
+        `secret=${challenge.enrollment.secret}`,
+      );
+
+      secret = challenge.enrollment.secret;
+
+      // No token has been minted yet: the provider callback alone is not a login.
+      const users = await prisma.user.findMany({
+        where: { application: { slug: 'e2e-mfa' } },
+      });
+      expect(users).toHaveLength(1);
+
+      const response = await submitCode(token, totp(secret));
+      expect(response.status).toBe(200);
+
+      const body = (await response.json()) as {
+        redirectUrl: string;
+        recoveryCodes: string[];
+      };
+      recoveryCodes = body.recoveryCodes;
+
+      expect(recoveryCodes).toHaveLength(10);
+      expect(recoveryCodes[0]).toMatch(/^[a-z2-9]{5}-[a-z2-9]{5}$/);
+
+      const final = new URL(body.redirectUrl);
+      expect(`${final.origin}${final.pathname}`).toBe(CONSUMER_REDIRECT);
+      expect(final.searchParams.get('state')).toBe('consumer-state');
+
+      const payload = claims(final.searchParams.get('token') as string);
+      expect(payload.mfa).toBe(true);
+      expect(payload.app).toBe('e2e-mfa');
+    });
+
+    it('asks an enrolled user for a code and refuses the wrong one', async () => {
+      await forgetLastUsedCode();
+      const token = await loginToChallenge('e2e-mfa');
+
+      const challenge = (await (await describeChallenge(token)).json()) as {
+        mode: string;
+        enrollment: unknown;
+      };
+
+      // The secret is handed over once, at enrolment, and never again.
+      expect(challenge.mode).toBe('verify');
+      expect(challenge.enrollment).toBeNull();
+
+      const wrong = await submitCode(token, staleCode());
+      expect(wrong.status).toBe(400);
+
+      const right = await submitCode(token, totp(secret));
+      expect(right.status).toBe(200);
+    });
+
+    it('refuses a code that has already been used', async () => {
+      await forgetLastUsedCode();
+
+      const first = await loginToChallenge('e2e-mfa');
+      const code = totp(secret);
+      expect((await submitCode(first, code)).status).toBe(200);
+
+      // Same code, same time step, a second login: still valid by the clock,
+      // and refused anyway.
+      const second = await loginToChallenge('e2e-mfa');
+      expect((await submitCode(second, code)).status).toBe(400);
+    });
+
+    it('accepts a recovery code once and never again', async () => {
+      const [code] = recoveryCodes;
+
+      const first = await loginToChallenge('e2e-mfa');
+      expect((await submitCode(first, code)).status).toBe(200);
+
+      const second = await loginToChallenge('e2e-mfa');
+      expect((await submitCode(second, code)).status).toBe(400);
+
+      // Only that one is spent; the rest still work.
+      const third = await loginToChallenge('e2e-mfa');
+      expect((await submitCode(third, recoveryCodes[1])).status).toBe(200);
+    });
+
+    it('gives up on a challenge after five wrong codes', async () => {
+      const token = await loginToChallenge('e2e-mfa');
+
+      for (let attempt = 1; attempt <= 5; attempt += 1) {
+        const response = await submitCode(token, staleCode(attempt + 1));
+        expect(response.status).toBe(400);
+      }
+
+      await forgetLastUsedCode();
+      const exhausted = await submitCode(token, totp(secret));
+      const body = (await exhausted.json()) as { error: string };
+
+      expect(exhausted.status).toBe(400);
+      expect(body.error).toBe('mfa_attempts_exhausted');
+    });
+
+    it('clears the factor when an admin resets it', async () => {
+      const user = await prisma.user.findFirstOrThrow({
+        where: { application: { slug: 'e2e-mfa' } },
+      });
+
+      const reset = await adminApi(`/admin/users/${user.id}/mfa/reset`, {
+        method: 'POST',
+      });
+      expect(reset.status).toBe(201);
+      expect(
+        ((await reset.json()) as { mfa: { enabled: boolean } }).mfa.enabled,
+      ).toBe(false);
+
+      // A required application enrols them again rather than letting them past.
+      const token = await loginToChallenge('e2e-mfa');
+      const challenge = (await (await describeChallenge(token)).json()) as {
+        mode: string;
+        enrollment: { secret: string };
+      };
+
+      expect(challenge.mode).toBe('enrol');
+      expect(challenge.enrollment.secret).not.toBe(secret);
+    });
+
+    it('enrols through the bearer API and challenges the next login', async () => {
+      await createApplication('e2e-selfserve');
+      stub.setProfile({ ...MFA_PROFILE, sub: 'self-serve-1' });
+
+      // An optional application lets an unenrolled user straight through.
+      const first = await login('e2e-selfserve');
+      const accessToken = first.searchParams.get('token') as string;
+      expect(claims(accessToken).mfa).toBe(false);
+
+      const bearer = {
+        'Content-Type': 'application/json',
+        authorization: `Bearer ${accessToken}`,
+      };
+
+      const started = await api('/mfa/totp', {
+        method: 'POST',
+        headers: bearer,
+        body: JSON.stringify({ label: 'Phone' }),
+      });
+      expect(started.status).toBe(201);
+
+      const enrolment = (await started.json()) as {
+        credentialId: string;
+        secret: string;
+      };
+
+      const confirmed = await api(
+        `/mfa/totp/${enrolment.credentialId}/confirm`,
+        {
+          method: 'POST',
+          headers: bearer,
+          body: JSON.stringify({ code: totp(enrolment.secret) }),
+        },
+      );
+      expect(confirmed.status).toBe(201);
+      expect(
+        ((await confirmed.json()) as { recoveryCodes: string[] }).recoveryCodes,
+      ).toHaveLength(10);
+
+      const status = (await (
+        await api('/mfa', { headers: bearer })
+      ).json()) as {
+        enabled: boolean;
+        credentials: Array<{ label: string }>;
+      };
+      expect(status.enabled).toBe(true);
+      expect(status.credentials[0].label).toBe('Phone');
+
+      // And the next login now stops at the prompt.
+      const second = await login('e2e-selfserve');
+      expect(`${second.origin}${second.pathname}`).toBe(`${FRONTEND_URL}/mfa`);
+    });
+
+    it('refuses the bearer API without a token this service issued', async () => {
+      const response = await api('/mfa', {
+        headers: { authorization: 'Bearer not-a-token' },
+      });
+
+      expect(response.status).toBe(401);
+    });
   });
 });

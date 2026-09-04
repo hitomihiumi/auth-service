@@ -39,6 +39,7 @@ export const applicationSelect = {
   clientId: true,
   tokenTtlSeconds: true,
   allowEmailLinking: true,
+  mfaPolicy: true,
   isActive: true,
   createdAt: true,
   updatedAt: true,
@@ -61,11 +62,38 @@ export const userSelect = {
       applicationProvider: { select: { slug: true, displayName: true } },
     },
   },
+  // Only the confirmed apps count as factors, and the secret is never among
+  // the columns read — an operator needs to know a user has one, not what it is.
+  totpCredentials: {
+    where: { confirmedAt: { not: null } },
+    select: { id: true, label: true, confirmedAt: true, lastUsedAt: true },
+    orderBy: { createdAt: 'asc' },
+  },
+  recoveryCodes: { where: { usedAt: null }, select: { id: true } },
 } satisfies Prisma.UserSelect;
 
 export type ProviderView = Prisma.ApplicationProviderGetPayload<{
   select: typeof providerSelect;
 }>;
+
+export type UserRow = Prisma.UserGetPayload<{ select: typeof userSelect }>;
+
+/**
+ * Folds the two factor relations into the shape the admin UI reads, so a
+ * response carries a count rather than a list of row ids.
+ */
+export function withUserExtras(user: UserRow) {
+  const { totpCredentials, recoveryCodes, ...rest } = user;
+
+  return {
+    ...rest,
+    mfa: {
+      enabled: totpCredentials.length > 0,
+      credentials: totpCredentials,
+      recoveryCodesRemaining: recoveryCodes.length,
+    },
+  };
+}
 
 /** Adds the fields the admin UI needs but the table does not store. */
 export function withProviderExtras(

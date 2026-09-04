@@ -55,6 +55,9 @@ On failure, with `error` instead of `token`:
 | `invalid_state` | The login transaction expired, was replayed, or is unknown |
 | `provider_error` | The upstream provider refused or failed |
 | `missing_code` | The provider returned no authorization code |
+| `invalid_mfa_challenge` | The second-factor prompt expired or was already answered |
+| `mfa_attempts_exhausted` | Too many wrong codes; the sign-in has to start again |
+| `mfa_required` | A code is owed and this service has no page to collect it — see [Two-factor authentication](#two-factor-authentication) |
 
 **4. Verify the token.** Never trust a decoded token — decoding proves nothing
 about the signature.
@@ -90,6 +93,7 @@ Content-Type: application/json
   "email_verified": true,
   "username": "Ada",
   "avatar": "https://…",
+  "mfa": true,
   "ver": 2,
   "iat": 1700000000,
   "exp": 1700003600
@@ -103,6 +107,10 @@ application from one minted for another.
 `sub` is unique **within an application**. The same person signing into two
 applications is two users with two different `sub` values, by design.
 
+`mfa` says whether a code from an authenticator app was checked as well as the
+provider login. It was added alongside two-factor support and is additive — no
+existing claim changed meaning, so `ver` stays at 2.
+
 ## Endpoints
 
 | Method | Path | Purpose |
@@ -112,8 +120,129 @@ applications is two users with two different `sub` values, by design.
 | `GET` | `/auth/callback/:providerId` | Provider callback — registered upstream, not called by you |
 | `GET` | `/auth/:appSlug/.well-known/jwks.json` | Public keys |
 | `POST` | `/auth/verify` | Server-side token check |
+| `GET` | `/auth/mfa/challenge?token=` | State of a pending second factor |
+| `POST` | `/auth/mfa/verify` | Spend a code and finish the sign-in |
+| `GET` | `/mfa` | Second factors of the bearer of an access token |
+| `POST` | `/mfa/totp` | Begin enrolling an authenticator app |
+| `POST` | `/mfa/totp/:id/confirm` | Confirm it with a code |
+| `POST` | `/mfa/totp/:id/remove` | Remove it (costs a current code) |
+| `POST` | `/mfa/recovery-codes` | Replace the recovery codes |
 
 Interactive documentation is at `/docs`.
+
+## Two-factor authentication
+
+Users can register an authenticator app — Google Authenticator, Authy,
+1Password, Aegis, or anything else that speaks TOTP (RFC 6238) — and be asked
+for a six-digit code after their provider login. An admin sets the policy per
+application:
+
+| Policy | Effect |
+|---|---|
+| `DISABLED` | Nobody is asked, even users who already enrolled |
+| `OPTIONAL` (default) | Users may enrol; only those who did are asked |
+| `REQUIRED` | Everyone is asked, and users without an app enrol on their next sign-in |
+
+Codes are checked with a one-step window either side of the current one, and a
+code is spent once accepted — the same six digits cannot sign in twice inside
+the ninety seconds they remain valid.
+
+### With the hosted sign-in page
+
+**Nothing changes for your application.** A login that owes a code stops at the
+service's own prompt at `<PUBLIC_APP_URL>/mfa`, and only reaches your
+`redirect_uri` once the code is accepted — with the same `token` and `state` as
+any other sign-in. The token then carries `"mfa": true`.
+
+### Collecting the code yourself
+
+If `PUBLIC_APP_URL` is not configured, the service has nowhere to send the
+browser, so it hands the challenge back to you instead:
+
+```
+https://your-app.example.com/callback?mfa_token=<handle>&error=mfa_required&state=<your-csrf-token>
+```
+
+Read what to ask for, and for a first enrolment the secret to render as a QR
+code:
+
+```http
+GET /auth/mfa/challenge?token=<handle>
+```
+
+```json
+{
+  "mode": "enrol",
+  "application": { "slug": "acme", "name": "Acme" },
+  "account": "ada@example.com",
+  "enrollment": {
+    "credentialId": "…",
+    "secret": "JBSWY3DPEHPK3PXP",
+    "otpauthUri": "otpauth://totp/Acme:ada@example.com?secret=…",
+    "algorithm": "SHA1",
+    "digits": 6,
+    "period": 30
+  },
+  "attemptsRemaining": 5,
+  "expiresAt": "2026-01-01T12:05:00.000Z"
+}
+```
+
+`mode` is `verify` for an enrolled user, and `enrollment` is then `null`.
+Then spend the code:
+
+```http
+POST /auth/mfa/verify
+Content-Type: application/json
+
+{ "token": "<handle>", "code": "123456" }
+```
+
+```json
+{
+  "redirectUrl": "https://your-app.example.com/callback?token=<jwt>&state=…",
+  "recoveryCodes": ["abcde-fghjk", "…"]
+}
+```
+
+Send the browser to `redirectUrl`. `recoveryCodes` is present only when the
+challenge enrolled the user's first factor — show them once, then never again.
+
+A challenge lasts five minutes and allows five wrong codes; a wrong one answers
+`400` and can be retried, anything else means the sign-in has to start over.
+
+### Letting users manage their own factors
+
+These endpoints authenticate with the access token this service issued, so your
+settings screen can call them directly with the token it already holds:
+
+```http
+POST /mfa/totp
+Authorization: Bearer <jwt>
+Content-Type: application/json
+
+{ "label": "Phone" }
+```
+
+The response carries `secret` and `otpauthUri`; render the latter as a QR code.
+Nothing is enforced until the user proves the app works:
+
+```http
+POST /mfa/totp/<credentialId>/confirm
+Authorization: Bearer <jwt>
+
+{ "code": "123456" }
+```
+
+which answers `{ "recoveryCodes": [...] }` for a first factor and
+`{ "recoveryCodes": null }` for a second device. `GET /mfa` reports what is
+registered, `POST /mfa/totp/<id>/remove` takes it away and
+`POST /mfa/recovery-codes` replaces the codes — the last two require a current
+code in the body, so a stolen access token cannot strip the factor guarding the
+account it came from.
+
+A user who has lost both their app and their recovery codes needs an admin, who
+clears their factors from the application's user list in the admin panel.
 
 ## Building your own sign-in page
 

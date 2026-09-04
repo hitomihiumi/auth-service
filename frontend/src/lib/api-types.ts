@@ -1,5 +1,12 @@
 export type ProviderKind = "GOOGLE" | "DISCORD" | "GITHUB" | "OIDC" | "OAUTH2";
 
+/**
+ * How an application treats codes from an authenticator app. `OPTIONAL`
+ * challenges only the users who enrolled, `REQUIRED` enrols everyone else on
+ * their next sign-in, `DISABLED` turns the prompt off entirely.
+ */
+export type MfaPolicy = "DISABLED" | "OPTIONAL" | "REQUIRED";
+
 export interface ProviderKindInfo {
   kind: ProviderKind;
   displayName: string;
@@ -64,6 +71,7 @@ export interface ApplicationSummary {
   clientId: string;
   tokenTtlSeconds: number;
   allowEmailLinking: boolean;
+  mfaPolicy: MfaPolicy;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -95,6 +103,16 @@ export interface AppUser {
     createdAt: string;
     applicationProvider: { slug: string; displayName: string };
   }>;
+  mfa: {
+    enabled: boolean;
+    credentials: Array<{
+      id: string;
+      label: string;
+      confirmedAt: string | null;
+      lastUsedAt: string | null;
+    }>;
+    recoveryCodesRemaining: number;
+  };
 }
 
 export interface Paginated<T> {
@@ -108,6 +126,35 @@ export interface AdminIdentity {
   id: string;
   email: string;
   role: "OWNER" | "ADMIN";
+}
+
+/**
+ * A login that has passed its provider and is waiting on a code. Anonymous:
+ * holding the handle is what the login proved.
+ */
+export interface MfaChallenge {
+  mode: "verify" | "enrol";
+  application: { slug: string; name: string };
+  account: string;
+  /** Present only while enrolling — the secret is shown once and never again. */
+  enrollment: {
+    credentialId: string;
+    label: string;
+    secret: string;
+    otpauthUri: string;
+    algorithm: string;
+    digits: number;
+    period: number;
+  } | null;
+  attemptsRemaining: number;
+  expiresAt: string;
+}
+
+export interface MfaVerified {
+  /** Where to send the browser once the code has been accepted. */
+  redirectUrl: string;
+  /** Returned once, when the challenge enrolled the user's first factor. */
+  recoveryCodes: string[] | null;
 }
 
 /** Public login-page payload; no authentication required. */

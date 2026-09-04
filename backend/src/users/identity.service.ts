@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Application, ApplicationProvider, Prisma, User } from '@prisma/client';
 import {
   EmailAlreadyRegisteredError,
+  UnknownUserError,
   UserBlockedError,
 } from '../common/errors';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,6 +13,25 @@ export class IdentityService {
   private readonly logger = new Logger(IdentityService.name);
 
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Re-reads a user part-way through a login, for the steps that happen after
+   * the provider has answered — an account blocked in between must not still
+   * be handed a token.
+   */
+  async findActiveUser(userId: string): Promise<User> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      throw new UnknownUserError('This account no longer exists');
+    }
+
+    if (user.isBlocked) {
+      throw new UserBlockedError('This account has been blocked');
+    }
+
+    return user;
+  }
 
   /**
    * Resolves a provider profile to a local user, creating one if needed.

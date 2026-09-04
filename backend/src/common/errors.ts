@@ -41,3 +41,30 @@ export class EmailAlreadyRegisteredError extends AuthFlowError {
 export class UserBlockedError extends AuthFlowError {
   readonly code = 'user_blocked';
 }
+
+export class UnknownUserError extends AuthFlowError {
+  readonly code = 'unknown_user';
+}
+
+/** The login is sound but a second factor is still owed. */
+export class MfaRequiredError extends AuthFlowError {
+  readonly code = 'mfa_required';
+}
+
+export class InvalidMfaChallengeError extends AuthFlowError {
+  readonly code = 'invalid_mfa_challenge';
+}
+
+export class InvalidMfaCodeError extends AuthFlowError {
+  readonly code = 'invalid_mfa_code';
+}
+
+/** The challenge ran out of guesses and has to be restarted from the sign-in page. */
+export class MfaAttemptsExhaustedError extends AuthFlowError {
+  readonly code = 'mfa_attempts_exhausted';
+}
+
+/** Enrolment was attempted on an application whose policy forbids it. */
+export class MfaNotAvailableError extends AuthFlowError {
+  readonly code = 'mfa_not_available';
+}

@@ -88,11 +88,28 @@ const envSchema = z
 export type Env = z.infer<typeof envSchema>;
 
 /**
+ * An unset variable and one set to nothing are the same thing here.
+ *
+ * Compose renders `- ENABLE_SWAGGER=${ENABLE_SWAGGER:-}` as an empty string
+ * rather than omitting it, and a `.env` file with a bare `KEY=` does the same.
+ * Zod's `.optional()` only excuses `undefined`, so those arrive as values that
+ * fail their own rules — an empty string is not "true" or "false", nor an
+ * email — and the process refuses to boot over a variable nobody set.
+ */
+function withoutBlanks(raw: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(raw).filter(
+      ([, value]) => !(typeof value === 'string' && value.trim() === ''),
+    ),
+  );
+}
+
+/**
  * Fails the process at boot with every problem listed at once, rather than
  * surfacing a missing variable as a runtime error on the first request.
  */
 export function validateEnv(raw: Record<string, unknown>): Env {
-  const result = envSchema.safeParse(raw);
+  const result = envSchema.safeParse(withoutBlanks(raw));
 
   if (!result.success) {
     const details = result.error.issues

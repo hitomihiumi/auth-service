@@ -39,6 +39,21 @@ const envSchema = z
     /** Comma-separated browser origins allowed to call the API with credentials. */
     ALLOWED_ORIGINS: z.string().optional(),
 
+    /**
+     * Domain attribute of the admin session cookie. Needed when the frontend
+     * and the API sit on different subdomains (auth.example.com and
+     * authcheck.example.com): a cookie without it belongs to the API's host
+     * alone, and the frontend's server never receives it. Set it to the shared
+     * parent, e.g. `example.com`. Leave unset for a single host.
+     */
+    COOKIE_DOMAIN: z
+      .string()
+      .regex(
+        /^\.?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i,
+        'must be a bare domain such as example.com — no scheme, port or path',
+      )
+      .optional(),
+
     DATABASE_URL: z.string().min(1),
 
     /** Single-key form. Normalised into a keyring with id "1". */

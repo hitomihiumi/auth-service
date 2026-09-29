@@ -20,15 +20,30 @@ export async function getAdminIdentity(): Promise<AdminIdentity | null> {
     return null;
   }
 
+  const url = `${internalBackendUrl()}/admin/auth/me`;
+
   try {
-    const response = await fetch(`${internalBackendUrl()}/admin/auth/me`, {
+    const response = await fetch(url, {
       headers: { cookie: header },
       cache: "no-store",
     });
 
-    return response.ok ? ((await response.json()) as AdminIdentity) : null;
-  } catch {
-    // The backend being unreachable is not an authenticated session.
+    if (response.ok) {
+      return (await response.json()) as AdminIdentity;
+    }
+
+    // 401 is the ordinary "session expired or revoked". Anything else means the
+    // request never reached the session check — a wrong INTERNAL_BACKEND_URL
+    // pointing at something that is not the API, or a proxy refusing it — and
+    // would otherwise look identical to being signed out.
+    if (response.status !== 401) {
+      console.warn(`Admin session check at ${url} answered ${response.status}`);
+    }
+    return null;
+  } catch (error) {
+    // The backend being unreachable is not an authenticated session, but it is
+    // worth saying so: silently bouncing to the login page hides the cause.
+    console.warn(`Admin session check could not reach ${url}:`, error);
     return null;
   }
 }

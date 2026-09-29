@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
-import { BACKEND_URL } from "./admin-api";
 import type { AdminIdentity } from "./api-types";
+import { internalBackendUrl } from "./runtime-config";
 
 /**
  * Resolves the admin session on the server.
@@ -21,7 +21,7 @@ export async function getAdminIdentity(): Promise<AdminIdentity | null> {
   }
 
   try {
-    const response = await fetch(`${BACKEND_URL}/admin/auth/me`, {
+    const response = await fetch(`${internalBackendUrl()}/admin/auth/me`, {
       headers: { cookie: header },
       cache: "no-store",
     });

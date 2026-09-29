@@ -79,6 +79,20 @@ To work inside one package directly, use
 ## Configuration
 
 Only infrastructure roots are environment variables — see `.env.example`.
+
+Nothing about a deployment is baked into the published images, so the same
+images run anywhere and are configured entirely at start-up:
+
+| Variable | Read by | Meaning |
+|---|---|---|
+| `PUBLIC_BASE_URL` | backend, and the frontend as its API address | Where browsers reach the API |
+| `PUBLIC_APP_URL` | backend, and the frontend as its own address | Where the sign-in pages are served |
+| `INTERNAL_BACKEND_URL` | frontend | API address for the frontend's own server-side requests (defaults to `http://backend:4000` in Compose, otherwise the public one) |
+
+Changing any of them needs only `docker compose up -d`, not a rebuild. Earlier
+versions took `NEXT_PUBLIC_BACKEND_URL` / `NEXT_PUBLIC_FRONTEND_URL` as build
+arguments; those are no longer used by Compose, but the frontend still honours
+them if a deployment sets them at runtime.
 Provider client ids and secrets, redirect URIs, token lifetimes and signing keys
 are stored in the database and managed through the admin panel.
 
@@ -121,7 +135,8 @@ the application's JWKS, or by calling `POST /auth/verify`.
 ## CI/CD
 
 `.github/workflows/ci.yml` lints, tests (against a Postgres service container)
-and builds both images, pushing to GHCR on `master`.
+and builds both images, pushing to GHCR on `master`. The images carry no
+deployment-specific values, so no repository variables are needed for them.
 
 Both images build from the repository root, because the workspace lockfile and
 the sibling manifests have to be inside the build context:

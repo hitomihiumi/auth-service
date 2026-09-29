@@ -7,6 +7,12 @@ import classNames from "classnames";
 import { baseURL, meta, fonts, style, dataStyle } from "@/resources/once-ui.config";
 import { Meta, Schema,  Column, Flex, Mask, MatrixFx} from "@once-ui-system/core";
 import { ThemeProviders } from '@/components/ThemeProviders';
+import { runtimeConfigScript, serverRuntimeConfig } from '@/lib/runtime-config';
+
+// Rendered per request. A statically prerendered layout would freeze the
+// addresses below into the HTML at build time, which is exactly what reading
+// them from the environment at runtime is meant to avoid.
+export const dynamic = 'force-dynamic';
 
 export async function generateMetadata() {
   return Meta.generate({
@@ -46,6 +52,10 @@ export default function RootLayout({
         path={meta.home.path}
       />
       <head>
+        <script
+          id="runtime-config"
+          dangerouslySetInnerHTML={{ __html: runtimeConfigScript(serverRuntimeConfig()) }}
+        />
         <script
           id="theme-init"
           dangerouslySetInnerHTML={{

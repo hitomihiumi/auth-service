@@ -1,5 +1,9 @@
 // IMPORTANT: Replace with your own domain address - it's used for SEO in meta tags and schema
-const baseURL = process.env.NEXT_PUBLIC_FRONTEND_URL || "https://auth.hitomihiumi.xyz";
+// Read per request through a function, not frozen at import time, so the value
+// follows the environment the container runs in rather than the build's.
+const frontendUrl = () =>
+  (process.env.PUBLIC_FRONTEND_URL || process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3430").replace(/\/+$/, "");
+const baseURL = frontendUrl();
 
 // Import and set font for each variant
 import { Geist } from "next/font/google";
@@ -71,9 +75,9 @@ const meta = {
     title: "Auth Service",
     description:
       "Auth Service for hitomihiumi applications.",
-    canonical: process.env.NEXT_PUBLIC_FRONTEND_URL || "https://auth.hitomihiumi.xyz",
+    canonical: frontendUrl(),
     robots: "noindex,nofollow",
-    alternates: [{ href: process.env.NEXT_PUBLIC_FRONTEND_URL || "https://auth.hitomihiumi.xyz", hrefLang: "en" }],
+    alternates: [{ href: frontendUrl(), hrefLang: "en" }],
   },
   // add more routes and reference them in page.tsx
 };

@@ -27,6 +27,7 @@ describe('validateEnv', () => {
     'ENCRYPTION_KEYS',
     'ENCRYPTION_ACTIVE_KEY_ID',
     'PUBLIC_APP_URL',
+    'COOKIE_DOMAIN',
   ])('treats a blank %s as unset rather than as a bad value', (key) => {
     expect(() => validateEnv({ ...BASE, [key]: '' })).not.toThrow();
   });
@@ -91,5 +92,25 @@ describe('validateEnv', () => {
     expect(() =>
       validateEnv({ ...BASE, ENCRYPTION_KEYS: keys, ENCRYPTION_KEY: '' }),
     ).toThrow(/ENCRYPTION_ACTIVE_KEY_ID/);
+  });
+
+  it('accepts a cookie domain as a bare (optionally dotted) domain', () => {
+    expect(
+      validateEnv({ ...BASE, COOKIE_DOMAIN: 'example.com' }).COOKIE_DOMAIN,
+    ).toBe('example.com');
+    expect(() =>
+      validateEnv({ ...BASE, COOKIE_DOMAIN: '.example.co.uk' }),
+    ).not.toThrow();
+  });
+
+  it.each([
+    'https://example.com',
+    'example.com:443',
+    'example.com/path',
+    'localhost',
+  ])('rejects %p as a cookie domain', (value) => {
+    expect(() => validateEnv({ ...BASE, COOKIE_DOMAIN: value })).toThrow(
+      /COOKIE_DOMAIN/,
+    );
   });
 });

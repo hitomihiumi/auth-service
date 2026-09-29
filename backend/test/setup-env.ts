@@ -21,6 +21,7 @@ process.env.NODE_ENV = 'test';
 process.env.PUBLIC_BASE_URL = E2E_BASE_URL;
 process.env.PUBLIC_APP_URL = E2E_FRONTEND_URL;
 process.env.ALLOWED_ORIGINS = 'http://localhost:5173';
+process.env.COOKIE_DOMAIN = 'auth-e2e.test';
 process.env.ENCRYPTION_KEY ??= Buffer.alloc(32, 'test-key').toString('base64');
 
 config();

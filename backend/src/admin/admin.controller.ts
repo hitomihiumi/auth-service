@@ -66,10 +66,10 @@ export class AdminController {
     });
 
     response.cookie(ADMIN_SESSION_COOKIE, token, {
+      ...this.sessionCookieScope(),
       httpOnly: true,
       sameSite: 'lax',
       secure: this.config.get<string>('NODE_ENV') === 'production',
-      path: '/',
       expires: expiresAt,
     });
 
@@ -84,7 +84,7 @@ export class AdminController {
   ): Promise<void> {
     const cookies = request.cookies as Record<string, string> | undefined;
     await this.adminAuth.logout(cookies?.[ADMIN_SESSION_COOKIE]);
-    response.clearCookie(ADMIN_SESSION_COOKIE, { path: '/' });
+    response.clearCookie(ADMIN_SESSION_COOKIE, this.sessionCookieScope());
   }
 
   @Get('auth/me')
@@ -109,7 +109,18 @@ export class AdminController {
       dto.newPassword,
     );
     // Every session was revoked, including this one.
-    response.clearCookie(ADMIN_SESSION_COOKIE, { path: '/' });
+    response.clearCookie(ADMIN_SESSION_COOKIE, this.sessionCookieScope());
+  }
+
+  /**
+   * Where the session cookie applies. A cookie is removed only by a header
+   * naming the same domain and path it was set with, so setting and clearing
+   * share this rather than each spelling it out.
+   */
+  private sessionCookieScope(): { path: string; domain?: string } {
+    const domain = this.config.get<string>('COOKIE_DOMAIN');
+
+    return domain ? { path: '/', domain } : { path: '/' };
   }
 
   // ------------------------------------------------------------ applications

@@ -400,6 +400,35 @@ describe('Auth flow (e2e)', () => {
     expect(redirect.searchParams.get('token')).toBeNull();
   });
 
+  describe('admin session cookie', () => {
+    const login = (): Promise<Response> =>
+      api('/admin/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }),
+      });
+
+    it('is scoped to the configured parent domain so the frontend host receives it', async () => {
+      const setCookie = (await login()).headers.get('set-cookie') as string;
+
+      expect(setCookie).toContain('Domain=auth-e2e.test');
+      expect(setCookie).toContain('HttpOnly');
+      expect(setCookie).toContain('Path=/');
+    });
+
+    it('is cleared with the same domain, or the browser would keep it', async () => {
+      const response = await adminApi('/admin/auth/logout', { method: 'POST' });
+      const cleared = response.headers.get('set-cookie') as string;
+
+      expect(cleared).toContain('Domain=auth-e2e.test');
+      expect(cleared).toMatch(/Expires=Thu, 01 Jan 1970/);
+
+      // Logging out revoked the shared session; open a fresh one for the rest.
+      const relogin = await login();
+      cookie = (relogin.headers.get('set-cookie') as string).split(';')[0];
+    });
+  });
+
   describe('second factor', () => {
     const MFA_PROFILE = {
       sub: 'mfa-user-1',

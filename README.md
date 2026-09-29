@@ -87,6 +87,7 @@ images run anywhere and are configured entirely at start-up:
 |---|---|---|
 | `PUBLIC_BASE_URL` | backend, and the frontend as its API address | Where browsers reach the API |
 | `PUBLIC_APP_URL` | backend, and the frontend as its own address | Where the sign-in pages are served |
+| `COOKIE_DOMAIN` | backend | Shared parent domain for the admin session cookie. **Required** when the frontend and API are on different subdomains (`auth.example.com` + `authcheck.example.com` → `example.com`); otherwise sign-in bounces back to the login page |
 | `INTERNAL_BACKEND_URL` | frontend | API address for the frontend's own server-side requests (defaults to `http://backend:4000` in Compose, otherwise the public one) |
 
 Changing any of them needs only `docker compose up -d`, not a rebuild. Earlier

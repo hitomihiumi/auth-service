@@ -1,6 +1,6 @@
 import { Button, Column, Feedback, Heading, Text } from "@once-ui-system/core";
-import { BACKEND_URL } from "@/lib/admin-api";
 import type { PublicProviders } from "@/lib/api-types";
+import { internalBackendUrl, publicBackendUrl } from "@/lib/runtime-config";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +26,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 async function loadProviders(slug: string): Promise<PublicProviders | null> {
   try {
     const response = await fetch(
-      `${BACKEND_URL}/public/applications/${encodeURIComponent(slug)}/providers`,
+      `${internalBackendUrl()}/public/applications/${encodeURIComponent(slug)}/providers`,
       { cache: "no-store" },
     );
 
@@ -104,7 +104,7 @@ export default async function LoginPage({
 
   const startUrl = (providerSlug: string): string => {
     const url = new URL(
-      `${BACKEND_URL}/auth/${encodeURIComponent(data.application.slug)}/${encodeURIComponent(providerSlug)}/start`,
+      `${publicBackendUrl()}/auth/${encodeURIComponent(data.application.slug)}/${encodeURIComponent(providerSlug)}/start`,
     );
     if (redirectUri) {
       url.searchParams.set("redirect_uri", redirectUri);

@@ -31,7 +31,7 @@ services:
       - ENCRYPTION_KEYS=${ENCRYPTION_KEYS:-}
       - ENCRYPTION_ACTIVE_KEY_ID=${ENCRYPTION_ACTIVE_KEY_ID:-}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:4000}
-      - PUBLIC_APP_URL=${NEXT_PUBLIC_FRONTEND_URL:-http://localhost:3430}
+      - PUBLIC_APP_URL=${PUBLIC_APP_URL:-http://localhost:3430}
       - APP_PORT=4000
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3430,http://localhost:5173}
       - ADMIN_BOOTSTRAP_EMAIL=${ADMIN_BOOTSTRAP_EMAIL:-}
@@ -47,14 +47,15 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-      args:
-        NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:4000}
-        NEXT_PUBLIC_FRONTEND_URL: ${NEXT_PUBLIC_FRONTEND_URL:-http://localhost:3430}
     ports:
       - "3430:3430"
     environment:
-      - NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL:-http://localhost:4000}
-      - NEXT_PUBLIC_FRONTEND_URL=${NEXT_PUBLIC_FRONTEND_URL:-http://localhost:3430}
+      # Read at startup, not baked into the image. The two public addresses are
+      # the same values the backend is given, so each is set once in .env.
+      - PUBLIC_BACKEND_URL=${PUBLIC_BASE_URL:-http://localhost:4000}
+      - PUBLIC_FRONTEND_URL=${PUBLIC_APP_URL:-http://localhost:3430}
+      # Server-side requests stay on the compose network.
+      - INTERNAL_BACKEND_URL=${INTERNAL_BACKEND_URL:-http://backend:4000}
     depends_on:
       - backend
     networks:

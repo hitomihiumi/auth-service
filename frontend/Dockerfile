@@ -19,13 +19,10 @@ RUN pnpm install --frozen-lockfile --filter @hitomihiumi/auth-frontend... --igno
 FROM deps AS build
 COPY frontend frontend
 
-# Baked into the client bundle at build time, so they are arguments rather than
-# runtime environment.
-ARG NEXT_PUBLIC_BACKEND_URL
-ENV NEXT_PUBLIC_BACKEND_URL=$NEXT_PUBLIC_BACKEND_URL
-ARG NEXT_PUBLIC_FRONTEND_URL
-ENV NEXT_PUBLIC_FRONTEND_URL=$NEXT_PUBLIC_FRONTEND_URL
-
+# Deliberately no build arguments: the backend and frontend addresses are read
+# from the environment when the container starts (PUBLIC_BACKEND_URL,
+# PUBLIC_FRONTEND_URL, INTERNAL_BACKEND_URL), so this image is the same for
+# every deployment.
 RUN pnpm --filter @hitomihiumi/auth-frontend run build
 
 FROM node:20-bookworm-slim AS runtime

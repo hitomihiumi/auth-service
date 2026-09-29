@@ -12,9 +12,7 @@ import type {
   ProviderKindInfo,
   RedirectUri,
 } from "./api-types";
-
-export const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000";
+import { publicBackendUrl } from "./runtime-config";
 
 export class ApiError extends Error {
   constructor(
@@ -35,7 +33,7 @@ interface ErrorBody {
  * credentials — and the token is never readable from JavaScript.
  */
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${BACKEND_URL}${path}`, {
+  const response = await fetch(`${publicBackendUrl()}${path}`, {
     ...init,
     credentials: "include",
     cache: "no-store",
